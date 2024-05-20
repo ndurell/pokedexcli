@@ -1,7 +1,6 @@
 package pokecache
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -23,22 +22,23 @@ func NewCache(interval time.Duration) Cache {
 		interval: interval,
 		mutex:    &sync.RWMutex{},
 	}
-	defer c.reapLoop()
+	go c.reapLoop(interval)
 	return c
 }
 
-func (c *Cache) reapLoop() {
-	ticker := time.NewTicker(c.interval)
-	go func() {
-		for t := range ticker.C {
-			c.mutex.Lock()
-			for k, v := range c.items {
-				fmt.Println(t.Sub(v.createdAt))
-				if t.Sub(v.createdAt) > c.interval {
-					delete(c.items, k)
-				}
-			}
-			c.mutex.Unlock()
+func (c *Cache) reapLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	for range ticker.C {
+		c.reap(time.Now().UTC(), interval)
+	}
+}
+
+func (c *Cache) reap(now time.Time, last time.Duration) {
+	c.mutex.Lock()
+	for k, v := range c.items {
+		if v.createdAt.Before(now.Add(-last)) {
+			delete(c.items, k)
 		}
-	}()
+	}
+	c.mutex.Unlock()
 }
